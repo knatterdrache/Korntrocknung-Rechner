@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Korntrocknungs-Rechner: Brenner vs. Wärmepumpe</title>
+  <style>
+    :root { --bg: #0f172a; --card: #1e293b; --text: #f8fafc; --muted: #94a3b8; --accent: #22c55e; --gas: #f59e0b; --oil: #ef4444; }
+    * { box-sizing: border-box; font-family: system-ui, -apple-system, sans-serif; }
+    body { margin: 0; background: var(--bg); color: var(--text); padding: 20px; line-height: 1.55; }
+    .wrap { max-width: 960px; margin: 0 auto; }
+    h1 { font-size: 1.5rem; margin-bottom: 0.25rem; }
+    p.sub { color: var(--muted); margin-top: 0; font-size: 0.95rem; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; margin-top: 20px; }
+    .card { background: var(--card); border-radius: 12px; padding: 18px; border: 1px solid #334155; }
+    .card h2 { font-size: 1.05rem; margin-top: 0; border-bottom: 1px solid #334155; padding-bottom: 8px; }
+    .row { margin-bottom: 14px; }
+    .row label { display: flex; justify-content: space-between; font-size: 0.9rem; margin-bottom: 4px; }
+    .row input[type=range] { width: 100%; accent-color: var(--accent); }
+    .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-top: 16px; }
+    .kpi { background: #0f172a; padding: 14px; border-radius: 10px; border: 1px solid #334155; }
+    .kpi .val { font-size: 1.35rem; font-weight: 700; color: var(--accent); }
+    .kpi .lbl { font-size: 0.8rem; color: var(--muted); }
+    .bar-wrap { margin-top: 14px; }
+    .bar-label { display: flex; justify-content: space-between; font-size: 0.9rem; margin-bottom: 4px; }
+    .bar-bg { background: #0f172a; height: 22px; border-radius: 6px; overflow: hidden; }
+    .bar-fill { height: 100%; transition: width 0.2s ease; }
+    .note { font-size: 0.8rem; color: var(--muted); margin-top: 16px; }
+
+    /* Rechenweg-Stile */
+    .steps { display: grid; gap: 14px; margin-top: 12px; }
+    .step { background: #0f172a; border: 1px solid #334155; border-radius: 10px; padding: 14px; }
+    .step h3 { margin: 0 0 6px 0; font-size: 0.98rem; color: var(--accent); }
+    .step p { margin: 4px 0; font-size: 0.9rem; color: #cbd5e1; }
+    .formula { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; background: #1e293b; padding: 8px 10px; border-radius: 6px; font-size: 0.85rem; color: #f8fafc; margin: 8px 0; overflow-x: auto; border-left: 3px solid var(--accent); }
+    .live-calc { font-size: 0.88rem; color: #94a3b8; }
+    .live-calc strong { color: #f8fafc; }
+
+    footer.disclaimer { margin-top: 24px; padding-top: 14px; border-top: 1px solid #334155; font-size: 0.8rem; color: var(--muted); text-align: center; }
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Korntrocknung: Offener Brenner vs. Wärmepumpe (geschlossener Kreis)</h1>
+  <p class="sub">Physikalische & wirtschaftliche Modellrechnung auf Basis konstanter Trockenmasse.</p>
+
+  <div class="grid">
+    <div class="card">
+      <h2>1. Erntegut & Anlage</h2>
+      <div class="row"><label>Chargenmenge (nass) <strong id="v_mass">150 t</strong></label><input type="range" id="mass" min="50" max="500" step="10" value="150"></div>
+      <div class="row"><label>Startfeuchte <strong id="v_w1">22 %</strong></label><input type="range" id="w1" min="15" max="38" step="0.5" value="22"></div>
+      <div class="row"><label>Zielfeuchte <strong id="v_w2">14 %</strong></label><input type="range" id="w2" min="8" max="16" step="0.5" value="14"></div>
+      <div class="row"><label>Brennerleistung (Ø) <strong id="v_pburn">450 kW</strong></label><input type="range" id="pburn" min="200" max="1000" step="25" value="450"></div>
+      <div class="row"><label>WP-Arbeitszahl (COP) <strong id="v_cop">3.5</strong></label><input type="range" id="cop" min="2.2" max="4.8" step="0.1" value="3.5"></div>
+    </div>
+
+    <div class="card">
+      <h2>2. Energiepreise & Investition</h2>
+      <div class="row"><label>Strompreis (Ø Herbst) <strong id="v_pel">20 ct/kWh</strong></label><input type="range" id="pel" min="10" max="40" step="1" value="20"></div>
+      <div class="row"><label>Gaspreis <strong id="v_pgas">11 ct/kWh</strong></label><input type="range" id="pgas" min="6" max="18" step="0.5" value="11"></div>
+      <div class="row"><label>Heizölpreis <strong id="v_poil">1,35 €/l</strong></label><input type="range" id="poil" min="0.8" max="2.2" step="0.05" value="1.35"></div>
+      <div class="row"><label>Mehrkosten WP vs. Gas <strong id="v_capex">110.000 €</strong></label><input type="range" id="capex" min="50000" max="200000" step="5000" value="110000"></div>
+      <div class="row"><label>Amortisationsziel <strong id="v_years">10 Jahre</strong></label><input type="range" id="years" min="5" max="15" step="1" value="10"></div>
+    </div>
+  </div>
+
+  <div class="kpis">
+    <div class="kpi"><div class="val" id="k_water">13,95 t</div><div class="lbl">Zu verdampfendes Wasser</div></div>
+    <div class="kpi"><div class="val" id="k_time">35,7 h</div><div class="lbl">Trocknungszeit pro Charge</div></div>
+    <div class="kpi"><div class="val" id="k_el">105 kW</div><div class="lbl">Stromanschluss WP (inkl. Lüfter)</div></div>
+    <div class="kpi"><div class="val" id="k_roi_gas">1.440 t/J</div><div class="lbl">Amortisation vs. Gas (Menge/Jahr)</div></div>
+    <div class="kpi"><div class="val" id="k_roi_oil">795 t/J</div><div class="lbl">Amortisation vs. Öl (Menge/Jahr)</div></div>
+  </div>
+
+  <div class="card" style="margin-top:16px;">
+    <h2>Energiekosten pro Charge (inkl. Ventilatorstrom)</h2>
+    <div class="bar-wrap">
+      <div class="bar-label"><span>Wärmepumpe (geschlossener Kreis)</span><strong id="c_wp">750 € (5,00 €/t)</strong></div>
+      <div class="bar-bg"><div class="bar-fill" id="b_wp" style="background:var(--accent); width:30%"></div></div>
+    </div>
+    <div class="bar-wrap">
+      <div class="bar-label"><span>Offener Gasbrenner</span><strong id="c_gas">1.896 € (12,64 €/t)</strong></div>
+      <div class="bar-bg"><div class="bar-fill" id="b_gas" style="background:var(--gas); width:75%"></div></div>
+    </div>
+    <div class="bar-wrap">
+      <div class="bar-label"><span>Offener Ölbrenner</span><strong id="c_oil">2.536 € (16,91 €/t)</strong></div>
+      <div class="bar-bg"><div class="bar-fill" id="b_oil" style="background:var(--oil); width:100%"></div></div>
+    </div>
+    <p class="note">Annahmen: Spezifischer Wärmebedarf offen = 1,15 kWh/kg Wasser, geschlossen = 0,75 kWh/kg Wasser; Lüfterleistung Brenner = 18 kW, WP = 21 kW (skaliert mit Anlagengröße); Heizöl = 9,8 kWh/l bei 92 % Wirkungsgrad.</p>
+  </div>
+
+  <div class="card" style="margin-top:16px;">
+    <h2>Vollständige Erklärung des Rechenwegs (live mit deinen Werten)</h2>
+    <div class="steps">
+
+      <div class="step">
+        <h3>Schritt 1: Zu verdampfende Wassermenge über konstante Trockenmasse</h3>
+        <p>Feuchteangaben beziehen sich immer auf die <strong>Gesamtmasse (Nassbasis)</strong>. Da während der Trocknung nur Wasser entweicht, bleibt die Trockenmasse (TM) konstant. Man darf also nicht einfach die Prozentpunkte abziehen.</p>
+        <div class="formula">m_TM = m_nass × (1 − w_start) &nbsp;|&nbsp; m_ende = m_TM / (1 − w_ziel) &nbsp;|&nbsp; Δm_Wasser = m_nass − m_ende</div>
+        <p class="live-calc" id="step1_text"></p>
+      </div>
+
+      <div class="step">
+        <h3>Schritt 2: Trocknungsdauer beim offenen Brenner</h3>
+        <p>Die reine Verdampfungsenthalpie von Wasser liegt bei ~0,68 kWh/kg. Da ein <strong>offener Warmlufttrockner</strong> jedoch kalte Herbstluft ansaugt, erwärmt und feuchte Abluft ins Freie bläst, liegt der reale spezifische Energiebedarf in der Praxis bei ca. <strong>1,15 kWh_th pro kg Wasser</strong>.</p>
+        <div class="formula">Q_offen = Δm_Wasser × 1,15 kWh/kg &nbsp;|&nbsp; t = Q_offen / P_Brenner</div>
+        <p class="live-calc" id="step2_text"></p>
+      </div>
+
+      <div class="step">
+        <h3>Schritt 3: Thermische & elektrische Leistung der Wärmepumpe (geschlossener Kreis)</h3>
+        <p>Im geschlossenen Kreislauf wird die feuchte Luft am kalten Verdampfer der Wärmepumpe unter den Taupunkt abgekühlt – das Wasser kondensiert aus und die Verdampfungswärme wird zurückgewonnen. Dadurch sinkt der spezifische Wärmebedarf (inkl. Sorptionswärme und Gehäuseverlusten) auf ca. <strong>0,75 kWh_th/kg</strong>. Für dieselbe Trocknungszeit <em>t</em> braucht die WP daher deutlich weniger Heizleistung als der offene Brenner:</p>
+        <div class="formula">P_th,WP = (Δm_Wasser × 0,75 kWh/kg) / t &nbsp;|&nbsp; P_el,WP = (P_th,WP / COP) + P_Lüfter,WP</div>
+        <p class="live-calc" id="step3_text"></p>
+      </div>
+
+      <div class="step">
+        <h3>Schritt 4: Laufende Energiekosten im Vergleich</h3>
+        <p>Für einen fairen Vergleich wird bei allen Systemen neben der Heizenergie auch der Strom für die Umwälzventilatoren berücksichtigt (beim offenen System ca. 18 kW bei 450 kW Brennerleistung; im geschlossenen WP-System wegen zusätzlicher Wärmetauscherregister etwas höher bei ca. 21 kW):</p>
+        <div class="formula">Kosten_Charge = (P_Heiz × Preis_Brennstoff + P_Lüfter × Preis_Strom) × t</div>
+        <p class="live-calc" id="step4_text"></p>
+      </div>
+
+      <div class="step">
+        <h3>Schritt 5: Amortisation der höheren Investitionskosten (CAPEX)</h3>
+        <p>Eine Entfeuchtungs-Wärmepumpe mit großen Luft-/Wasser-Wärmetauschern und dichter Kammer ist in der Anschaffung teurer als ein Brenner. Damit sich diese Mehrkosten im gewählten Zeitraum allein über die Energiekostenersparnis bezahlt machen, ergibt sich folgende Mindestauslastung pro Jahr:</p>
+        <div class="formula">Jährliches_Ziel = Mehrkosten_WP / Jahre &nbsp;|&nbsp; Mindestmenge/Jahr = Jährliches_Ziel / Ersparnis_pro_Tonne</div>
+        <p class="live-calc" id="step5_text"></p>
+      </div>
+
+    </div>
+  </div>
+
+  <footer class="disclaimer">
+    Disclaimer: Inhalt mit KI erstellt, durch Mensch geprüft, dennoch keine Gewähr auf Korrektheit.
+  </footer>
+</div>
+
+<script>
+  const ids = ['mass','w1','w2','pburn','cop','pel','pgas','poil','capex','years'];
+  const el = id => document.getElementById(id);
+  const fmt = (n, d=0) => n.toLocaleString('de-DE', { minimumFractionDigits: d, maximumFractionDigits: d });
+
+  function calc() {
+    const mass = +el('mass').value;
+    let w1 = +el('w1').value / 100;
+    let w2 = +el('w2').value / 100;
+    if (w2 >= w1) { w2 = w1 - 0.01; el('w2').value = (w2 * 100).toFixed(1); }
+
+    const pburn = +el('pburn').value;
+    const cop = +el('cop').value;
+    const pel = +el('pel').value / 100;
+    const pgas = +el('pgas').value / 100;
+    const poil = +el('poil').value;
+    const capex = +el('capex').value;
+    const years = +el('years').value;
+
+    el('v_mass').textContent = `${mass} t`;
+    el('v_w1').textContent = `${(w1*100).toFixed(1).replace('.0','')} %`;
+    el('v_w2').textContent = `${(w2*100).toFixed(1).replace('.0','')} %`;
+    el('v_pburn').textContent = `${pburn} kW`;
+    el('v_cop').textContent = cop.toFixed(1);
+    el('v_pel').textContent = `${Math.round(pel*100)} ct/kWh`;
+    el('v_pgas').textContent = `${(pgas*100).toFixed(1).replace('.0','')} ct/kWh`;
+    el('v_poil').textContent = `${fmt(poil, 2)} €/l`;
+    el('v_capex').textContent = `${fmt(capex)} €`;
+    el('v_years').textContent = `${years} Jahre`;
+
+    // Schritt 1
+    const dryMassT = mass * (1 - w1);
+    const endMassT = dryMassT / (1 - w2);
+    const waterT = mass - endMassT;
+    const waterKg = waterT * 1000;
+
+    // Schritt 2
+    const qOpen = waterKg * 1.15;
+    const hours = qOpen / pburn;
+
+    // Schritt 3
+    const qClosed = waterKg * 0.75;
+    const pThWp = qClosed / hours;
+    const fanBurn = 18 * (pburn / 450);
+    const fanWp = 21 * (pburn / 450);
+    const pCompWp = pThWp / cop;
+    const pElWp = pCompWp + fanWp;
+
+    // Schritt 4
+    const costWpH = pElWp * pel;
+    const costGasH = (pburn * pgas) + (fanBurn * pel);
+    const oilPriceKwh = poil / (9.8 * 0.92);
+    const costOilH = (pburn * oilPriceKwh) + (fanBurn * pel);
+
+    const costWp = costWpH * hours;
+    const costGas = costGasH * hours;
+    const costOil = costOilH * hours;
+
+    // Schritt 5
+    const annualTarget = capex / years;
+    const saveGasT = (costGas - costWp) / mass;
+    const saveOilT = (costOil - costWp) / mass;
+    const minTonsGas = saveGasT > 0 ? annualTarget / saveGasT : null;
+    const minHoursGas = minTonsGas ? (minTonsGas / mass) * hours : null;
+    const minTonsOil = saveOilT > 0 ? annualTarget / saveOilT : null;
+    const minHoursOil = minTonsOil ? (minTonsOil / mass) * hours : null;
+
+    // KPIs & Balken
+    el('k_water').textContent = `${fmt(waterT, 2)} t`;
+    el('k_time').textContent = `${fmt(hours, 1)} h`;
+    el('k_el').textContent = `${Math.round(pElWp)} kW`;
+    el('k_roi_gas').textContent = minTonsGas ? `${fmt(minTonsGas)} t/J` : 'nie';
+    el('k_roi_oil').textContent = minTonsOil ? `${fmt(minTonsOil)} t/J` : 'nie';
+
+    el('c_wp').textContent = `${fmt(costWp)} € (${fmt(costWp/mass, 2)} €/t)`;
+    el('c_gas').textContent = `${fmt(costGas)} € (${fmt(costGas/mass, 2)} €/t)`;
+    el('c_oil').textContent = `${fmt(costOil)} € (${fmt(costOil/mass, 2)} €/t)`;
+
+    const maxC = Math.max(costWp, costGas, costOil, 1);
+    el('b_wp').style.width = `${(costWp / maxC) * 100}%`;
+    el('b_gas').style.width = `${(costGas / maxC) * 100}%`;
+    el('b_oil').style.width = `${(costOil / maxC) * 100}%`;
+
+    // Live-Erklärtexte aktualisieren
+    el('step1_text').innerHTML = `Aktuell: <strong>${fmt(mass)} t</strong> Startmasse enthalten <strong>${fmt(dryMassT, 2)} t Trockenmasse</strong>. Bei ${fmt(w2*100, 1)} % Restfeuchte bleiben <strong>${fmt(endMassT, 2)} t</strong> getrocknetes Gut übrig – es müssen also exakt <strong>${fmt(waterT, 2)} t (${fmt(waterKg)} kg) Wasser</strong> verdampft werden.`;
+
+    el('step2_text').innerHTML = `Aktuell: ${fmt(waterKg)} kg × 1,15 kWh/kg = <strong>${fmt(qOpen)} kWh_th</strong> Gesamtwärmebedarf. Geteilt durch <strong>${fmt(pburn)} kW</strong> ergibt das eine Trocknungszeit von <strong>${fmt(hours, 1)} Stunden</strong> pro Charge.`;
+
+    el('step3_text').innerHTML = `Aktuell: ${fmt(waterKg)} kg × 0,75 kWh/kg = <strong>${fmt(qClosed)} kWh_th</strong>. Auf ${fmt(hours, 1)} h verteilt braucht die WP nur <strong>${fmt(pThWp, 1)} kW_th</strong> Heizleistung. Bei einem COP von ${fmt(cop, 1)} zieht der Verdichter <strong>${fmt(pCompWp, 1)} kW_el</strong> + <strong>${fmt(fanWp, 1)} kW_el</strong> Lüfter = <strong>${fmt(pElWp, 1)} kW_el</strong> Gesamtanschlussleistung.`;
+
+    el('step4_text').innerHTML = `Aktuell: Die WP kostet <strong>${fmt(costWpH, 2)} €/h</strong> (<strong>${fmt(costWp)} €</strong> je Charge bzw. <strong>${fmt(costWp/mass, 2)} €/t</strong>). Gas liegt bei <strong>${fmt(costGasH, 2)} €/h</strong> (<strong>${fmt(costGas)} €</strong> bzw. <strong>${fmt(costGas/mass, 2)} €/t</strong>), Heizöl bei effektiv ${fmt(oilPriceKwh*100, 1)} ct/kWh_th bei <strong>${fmt(costOilH, 2)} €/h</strong> (<strong>${fmt(costOil)} €</strong> bzw. <strong>${fmt(costOil/mass, 2)} €/t</strong>).`;
+
+    const gasRoiText = minTonsGas
+      ? `Gegenüber <strong>Gas</strong> spart die WP <strong>${fmt(saveGasT, 2)} €/t</strong> – die Schwelle liegt bei <strong>${fmt(minTonsGas)} t/Jahr</strong> (entspricht ca. <strong>${fmt(minHoursGas)} Betriebsstunden/Jahr</strong>).`
+      : `Gegenüber <strong>Gas</strong> ergibt sich bei diesen Energiepreisen keine laufende Ersparnis.`;
+    const oilRoiText = minTonsOil
+      ? `Gegenüber <strong>Heizöl</strong> liegt die Ersparnis bei <strong>${fmt(saveOilT, 2)} €/t</strong> – hier reicht schon eine Menge von <strong>${fmt(minTonsOil)} t/Jahr</strong> (ca. <strong>${fmt(minHoursOil)} Betriebsstunden/Jahr</strong>).`
+      : `Gegenüber <strong>Heizöl</strong> ergibt sich bei diesen Energiepreisen keine laufende Ersparnis.`;
+    el('step5_text').innerHTML = `Aktuell: ${fmt(capex)} € Mehrkosten auf ${years} Jahre bedeuten <strong>${fmt(annualTarget)} €/Jahr</strong> nötige Einsparung. ${gasRoiText} ${oilRoiText}`;
+  }
+
+  ids.forEach(id => el(id).addEventListener('input', calc));
+  calc();
+</script>
+</body>
+</html>
